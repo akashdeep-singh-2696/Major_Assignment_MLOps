@@ -1,0 +1,103 @@
+name: Major Assignment(MLOps) - Linear Regression Pipeline
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test_suite:
+    runs-on: ubuntu-latest
+    name: Run Test Suite
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest -v
+
+  train_and_quantize:
+    needs: test_suite
+    runs-on: ubuntu-latest
+    name: Train Model and Quantize
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create models directory
+        run: mkdir -p models
+
+      - name: Run training script
+        run: python src/train.py
+
+      - name: Run quantization script
+        run: python src/quantize.py
+
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-artifacts
+          path: models/
+
+      - name: Verify model files exist
+        run: |
+          ls -la models/
+          test -f models/linear_regression_model.joblib
+          test -f models/unquant_params.joblib
+          test -f models/quant_params.joblib
+
+  build_and_test_container:
+    needs: train_and_quantize
+    runs-on: ubuntu-latest
+    name: Build and Test Docker Container
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download model artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: model-artifacts
+          path: models/
+
+      - name: Verify downloaded model files
+        run: |
+          ls -la models/
+          test -f models/linear_regression_model.joblib
+          test -f models/unquant_params.joblib
+          test -f models/quant_params.joblib
+
+      - name: Build Docker image
+        run: docker build -t linearregression:latest .
+
+      - name: Test Docker container (run predict.py)
+        run: docker run --rm linearregression:latest python src/predict.py
